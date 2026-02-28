@@ -103,10 +103,10 @@ export default function DashboardPage() {
             <header className="header">
                 <div className="header-inner">
                     <div className="header-brand">
-                        <div className="header-logo">🔐</div>
+
                         <div className="header-text">
                             <h1>Ngala Memorial Girls — Watamu</h1>
-                            <p>AutoLock Smart Storage System</p>
+                            <h1>AutoLock Smart Storage System</h1>
                         </div>
                     </div>
                     <div className="header-badge">
