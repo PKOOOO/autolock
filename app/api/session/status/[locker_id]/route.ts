@@ -55,12 +55,11 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         const otp = session.otp_plain;
 
         // --- Deliver OTP and mark as delivered (atomic update) ---
+        // Keep status as 'paid' — ESP32 will call /session/end after retrieval
         await sql`
       UPDATE sessions
       SET otp_delivered = TRUE,
-          otp_plain = NULL,
-          status = 'active',
-          started_at = COALESCE(started_at, NOW())
+          otp_plain = NULL
       WHERE id = ${session.id}
         AND otp_delivered = FALSE
     `;
