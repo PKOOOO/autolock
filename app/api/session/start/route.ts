@@ -1,45 +1,35 @@
 // =============================================================
 // POST /api/session/start
 // =============================================================
+// Called when customer STORES goods (no payment, free).
+// Creates an active session with timer started.
 //
-// Starts a new storage session:
-//   1. Receives { phone, locker_id } from the web app
-//   2. Creates a "pending" session in the database
-//   3. Initiates an M-Pesa STK push for KES 10 initial fee
-//   4. Returns { success, session_id }
-//
-// The actual payment confirmation happens asynchronously via
-// the Paystack webhook (/api/webhook/paystack).
-//
+// Receives: { locker_id }
+// Returns:  { success, session_id }
 // =============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { initiateMpesaCharge } from '@/lib/paystack';
-import crypto from 'crypto';
-
-const INITIAL_FEE_KES = 10;
 
 export async function POST(request: NextRequest) {
     try {
-        // --- Parse request body ---
         const body = await request.json();
-        const { phone, locker_id } = body;
+        const { locker_id } = body;
 
-        if (!phone || !locker_id) {
+        if (!locker_id) {
             return NextResponse.json(
-                { success: false, error: 'Missing required fields: phone, locker_id' },
+                { success: false, error: 'Missing required field: locker_id' },
                 { status: 400 }
             );
         }
 
-        console.log(`[SESSION/START] Phone: ${phone}, Locker: ${locker_id}`);
+        console.log(`[SESSION/START] Locker: ${locker_id} — storing goods (free)`);
 
-        // --- Check if locker already has an active session ---
+        // Check if locker already has an active session
         const existing = await sql`
       SELECT id FROM sessions
       WHERE locker_id = ${locker_id}
-        AND status IN ('pending', 'paid', 'active')
+        AND status IN ('active', 'pending_payment', 'paid')
       LIMIT 1
     `;
 
@@ -50,41 +40,19 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // --- Generate unique payment reference ---
-        const reference = `autolock_${locker_id}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
-
-        // --- Create pending session in database ---
+        // Create active session — timer starts NOW, no payment
         const result = await sql`
-      INSERT INTO sessions (locker_id, phone, status, paystack_ref, amount_initial)
-      VALUES (${locker_id}, ${phone}, 'pending', ${reference}, ${INITIAL_FEE_KES})
+      INSERT INTO sessions (locker_id, phone, status, started_at)
+      VALUES (${locker_id}, '', 'active', NOW())
       RETURNING id
     `;
 
         const sessionId = result[0].id;
-        console.log(`[SESSION/START] Created session: ${sessionId}`);
+        console.log(`[SESSION/START] Session created: ${sessionId} — timer started`);
 
-        // --- Initiate M-Pesa STK push ---
-        const charge = await initiateMpesaCharge(phone, INITIAL_FEE_KES, reference);
-
-        console.log(`[SESSION/START] Paystack response: ${charge.message}`);
-
-        if (!charge.success) {
-            // Mark session as failed if charge initiation fails
-            await sql`
-        UPDATE sessions SET status = 'failed' WHERE id = ${sessionId}
-      `;
-
-            return NextResponse.json(
-                { success: false, error: 'Failed to initiate payment', details: charge.message },
-                { status: 502 }
-            );
-        }
-
-        // --- Success: session created, STK push sent ---
         return NextResponse.json({
             success: true,
             session_id: sessionId,
-            message: 'Payment prompt sent to your phone. Enter M-Pesa PIN to confirm.',
         });
 
     } catch (error) {
