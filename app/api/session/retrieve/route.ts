@@ -16,8 +16,7 @@ import { sql } from '@/lib/db';
 import { initiateMpesaCharge } from '@/lib/paystack';
 import crypto from 'crypto';
 
-const RATE_PER_MINUTE_KES = 1;
-const MIN_CHARGE_KES = 1;
+const FLAT_RATE_KES = 10;
 
 export async function POST(request: NextRequest) {
     try {
@@ -54,10 +53,10 @@ export async function POST(request: NextRequest) {
         const startedAt = new Date(session.started_at);
         const now = new Date();
 
-        // Calculate cost: ceiling to nearest minute, minimum 1 KES
+        // Calculate time for display only — flat rate KES 10
         const diffMs = now.getTime() - startedAt.getTime();
         const minutesUsed = Math.max(1, Math.ceil(diffMs / 60000));
-        const amount = Math.max(MIN_CHARGE_KES, minutesUsed * RATE_PER_MINUTE_KES);
+        const amount = FLAT_RATE_KES;
 
         console.log(`[RETRIEVE] Duration: ${minutesUsed}m, Cost: KES ${amount}`);
 
