@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       SELECT id, started_at
       FROM sessions
       WHERE locker_id = ${locker_id}
-        AND status = 'active'
+        AND status IN ('active', 'pending_payment')
       ORDER BY created_at DESC
       LIMIT 1
     `;
@@ -80,10 +80,8 @@ export async function POST(request: NextRequest) {
         console.log(`[RETRIEVE] Paystack: ${charge.message}`);
 
         if (!charge.success) {
-            // Revert to active so customer can retry
-            await sql`
-        UPDATE sessions SET status = 'active' WHERE id = ${session.id}
-      `;
+            // Leave session as pending_payment — the retrieve query matches
+            // both 'active' and 'pending_payment', so the user can retry.
 
             return NextResponse.json(
                 { success: false, error: 'Payment failed', details: charge.message },
