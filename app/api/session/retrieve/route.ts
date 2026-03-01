@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
-import { initiateMpesaCharge } from '@/lib/paystack';
+import { initiateMpesaCharge, isTestMode, submitChargeOTP } from '@/lib/paystack';
 import crypto from 'crypto';
 
 const FLAT_RATE_KES = 10;
@@ -79,13 +79,19 @@ export async function POST(request: NextRequest) {
         console.log(`[RETRIEVE] Paystack: ${charge.message}`);
 
         if (!charge.success) {
-            // Leave session as pending_payment — the retrieve query matches
-            // both 'active' and 'pending_payment', so the user can retry.
-
             return NextResponse.json(
                 { success: false, error: 'Payment failed', details: charge.message },
                 { status: 502 }
             );
+        }
+
+        // In TEST mode, Paystack doesn't send a real STK push. Instead it
+        // returns status "send_otp". We auto-submit the test OTP "123456"
+        // so the charge completes and the webhook fires.
+        if (isTestMode() && charge.raw.data?.status === 'send_otp') {
+            console.log(`[RETRIEVE] Test mode detected — auto-submitting OTP "123456"`);
+            const otpResult = await submitChargeOTP('123456', charge.reference);
+            console.log(`[RETRIEVE] Test OTP result: ${otpResult.message}`);
         }
 
         return NextResponse.json({
@@ -93,7 +99,9 @@ export async function POST(request: NextRequest) {
             session_id: session.id,
             minutes_used: minutesUsed,
             amount: amount,
-            message: `KES ${amount} for ${minutesUsed} min. Check phone to pay.`,
+            message: isTestMode()
+                ? `TEST MODE: KES ${amount} charge simulated. Webhook will fire shortly.`
+                : `KES ${amount} for ${minutesUsed} min. Check phone to pay.`,
         });
 
     } catch (error) {

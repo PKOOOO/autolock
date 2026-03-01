@@ -46,12 +46,7 @@ function formatDate(dateStr: string): string {
     return d.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
-function getLiveCost(startedAt: string): number {
-    const start = new Date(startedAt).getTime();
-    const now = Date.now();
-    const mins = Math.max(1, Math.ceil((now - start) / 60000));
-    return mins;
-}
+const FLAT_RATE_KES = 10;
 
 export default function DashboardPage() {
     const [data, setData] = useState<DashboardData | null>(null);
@@ -89,10 +84,7 @@ export default function DashboardPage() {
     const activeSessions = sessions.filter(s => s.status === 'active' || s.status === 'pending_payment' || s.status === 'paid');
     const endedSessions = sessions.filter(s => s.status === 'ended');
     const totalRevenue = sessions.reduce((sum, s) => sum + (s.amount_final || 0), 0);
-    const activeRevenue = activeSessions.reduce((sum, s) => {
-        if (s.started_at) return sum + getLiveCost(s.started_at);
-        return sum;
-    }, 0);
+    const activeRevenue = activeSessions.length * FLAT_RATE_KES;
 
     // Force using tick to prevent tree-shaking
     void tick;
@@ -184,8 +176,7 @@ export default function DashboardPage() {
                                 <tbody>
                                     {sessions.map((session) => {
                                         const isActive = session.status === 'active' || session.status === 'pending_payment' || session.status === 'paid';
-                                        const liveCost = session.started_at ? getLiveCost(session.started_at) : 0;
-                                        const displayCost = isActive ? liveCost : (session.amount_final || 0);
+                                        const displayCost = isActive ? FLAT_RATE_KES : (session.amount_final || 0);
                                         const displayDuration = session.started_at
                                             ? (isActive ? formatDuration(session.started_at) : `${session.minutes_used || 0}m`)
                                             : '—';

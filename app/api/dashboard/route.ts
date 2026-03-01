@@ -35,11 +35,11 @@ export async function GET() {
             THEN CEIL(EXTRACT(EPOCH FROM (ended_at - started_at)) / 60)
           ELSE 0
         END AS minutes_used,
-        -- Compute running cost for active sessions
+        -- Flat rate KES 10 for active sessions
         CASE
-          WHEN status = 'active' AND started_at IS NOT NULL
-            THEN CEIL(EXTRACT(EPOCH FROM (NOW() - started_at)) / 60) * 5
-          ELSE amount_final
+          WHEN status IN ('active', 'pending_payment') AND started_at IS NOT NULL
+            THEN 10
+          ELSE COALESCE(amount_final, 0)
         END AS current_cost
       FROM sessions
       ORDER BY created_at DESC

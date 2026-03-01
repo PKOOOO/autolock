@@ -151,6 +151,7 @@ export async function initiateMpesaCharge(
     // when the STK push is pending user confirmation. This is NOT an error.
     const isPending = data.message === 'Charge attempted' ||
         data.data?.status === 'send_otp' ||
+        data.data?.status === 'pay_offline' ||
         data.data?.status === 'pending';
 
     return {
@@ -190,7 +191,7 @@ export function verifyWebhookSignature(
 // Uses crypto.randomInt for cryptographic randomness.
 // -------------------------------------------------------------
 export function generateOTP(): string {
-    const otp = crypto.randomInt(1000, 9999).toString();
+    const otp = crypto.randomInt(1000, 10000).toString();
     return otp;
 }
 
@@ -205,6 +206,52 @@ export function hashOTP(otp: string): string {
         .createHash('sha256')
         .update(otp + (process.env.NEXTAUTH_SECRET || ''))
         .digest('hex');
+}
+
+// -------------------------------------------------------------
+// isTestMode()
+// Returns true if using Paystack test keys.
+// Test keys start with "sk_test_".
+// -------------------------------------------------------------
+export function isTestMode(): boolean {
+    return getSecretKey().startsWith('sk_test_');
+}
+
+// -------------------------------------------------------------
+// submitChargeOTP()
+// Submits an OTP to complete a Paystack charge.
+//
+// In TEST mode, Paystack mobile money returns status "send_otp"
+// instead of sending a real STK push. You must call this with
+// OTP "123456" to simulate the user approving payment.
+//
+// In LIVE mode, the real STK push goes to the phone and
+// this function is not needed.
+// -------------------------------------------------------------
+export async function submitChargeOTP(
+    otp: string,
+    reference: string
+): Promise<ChargeResult> {
+    console.log(`[PAYSTACK] Submitting OTP for ref: ${reference}`);
+
+    const response = await fetch(`${PAYSTACK_BASE_URL}/charge/submit_otp`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${getSecretKey()}`,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ otp, reference }),
+    });
+
+    const data: PaystackChargeResponse = await response.json();
+    console.log(`[PAYSTACK] OTP submit response:`, JSON.stringify(data, null, 2));
+
+    return {
+        success: data.status || data.data?.status === 'success',
+        reference: data.data?.reference || reference,
+        message: data.message,
+        raw: data,
+    };
 }
 
 // Re-export formatPhone for use in API routes
