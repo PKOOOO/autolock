@@ -1,13 +1,3 @@
-// =============================================================
-// POST /api/session/start
-// =============================================================
-// Called when customer STORES goods (no payment, free).
-// Creates an active session with timer started.
-//
-// Receives: { locker_id }
-// Returns:  { success, session_id }
-// =============================================================
-
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 
@@ -25,13 +15,25 @@ export async function POST(request: NextRequest) {
 
         console.log(`[SESSION/START] Locker: ${locker_id} — storing goods (free)`);
 
-        // Check if locker already has an active session
+        // Auto-expire stale sessions:
+        // - active/pending_payment older than 10 minutes
+        // - paid sessions older than 1 hour (user never retrieved)
+        await sql`
+            UPDATE sessions SET status = 'expired'
+            WHERE locker_id = ${locker_id}
+              AND (
+                (status IN ('active', 'pending_payment') AND created_at < NOW() - INTERVAL '10 minutes')
+                OR (status = 'paid' AND created_at < NOW() - INTERVAL '1 hour')
+              )
+        `;
+
+        // Check if locker still has a recent active session
         const existing = await sql`
-      SELECT id FROM sessions
-      WHERE locker_id = ${locker_id}
-        AND status IN ('active', 'pending_payment', 'paid')
-      LIMIT 1
-    `;
+            SELECT id FROM sessions
+            WHERE locker_id = ${locker_id}
+              AND status IN ('active', 'pending_payment', 'paid')
+            LIMIT 1
+        `;
 
         if (existing.length > 0) {
             return NextResponse.json(
@@ -40,12 +42,11 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Create active session — timer starts NOW, no payment
         const result = await sql`
-      INSERT INTO sessions (locker_id, phone, status, started_at)
-      VALUES (${locker_id}, '', 'active', NOW())
-      RETURNING id
-    `;
+            INSERT INTO sessions (locker_id, phone, status, started_at)
+            VALUES (${locker_id}, '', 'active', NOW())
+            RETURNING id
+        `;
 
         const sessionId = result[0].id;
         console.log(`[SESSION/START] Session created: ${sessionId} — timer started`);
