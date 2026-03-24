@@ -2,17 +2,19 @@
 // GET /api/session/status/[locker_id]
 // =============================================================
 //
-// ESP32 polls this endpoint every 5 seconds to check if
-// payment has been confirmed and an OTP is ready.
+// ESP32 polls this endpoint every 5 seconds after initiating
+// payment to check if M-Pesa payment is confirmed and the PIN
+// is ready.
 //
 // Responses:
 //   { paid: false }                    — still waiting for payment
-//   { paid: true, otp: "1234" }        — payment confirmed, here's the OTP
+//   { paid: true, pin: "1234" }        — payment confirmed, here's the PIN
 //
 // Security:
-//   - OTP is returned ONLY ONCE. After the first successful poll,
-//     otp_plain is nulled and otp_delivered is set to true.
-//   - Rate limiting via simple timestamp check (future enhancement).
+//   - PIN is returned ONLY ONCE via this endpoint. After the
+//     first successful poll, otp_plain is nulled and otp_delivered
+//     is set to true. The pin_code column retains the PIN for
+//     later retrieval verification.
 //
 // =============================================================
 
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
             );
         }
 
-        // --- Look for a paid session with an undelivered OTP ---
+        // --- Look for a paid session with an undelivered PIN ---
         const sessions = await sql`
       SELECT id, otp_plain, otp_delivered, status
       FROM sessions
@@ -46,29 +48,30 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       LIMIT 1
     `;
 
-        // No paid session with OTP ready
+        // No paid session with PIN ready
         if (sessions.length === 0) {
             return NextResponse.json({ paid: false });
         }
 
         const session = sessions[0];
-        const otp = session.otp_plain;
+        const pin = session.otp_plain;
 
-        // --- Deliver OTP and mark as delivered (atomic update) ---
-        // Keep status as 'paid' — ESP32 will call /session/end after retrieval
+        // --- Deliver PIN and mark as delivered (atomic update) ---
+        // Also set status back to 'active' — goods are about to be stored
         await sql`
       UPDATE sessions
       SET otp_delivered = TRUE,
-          otp_plain = NULL
+          otp_plain = NULL,
+          status = 'active'
       WHERE id = ${session.id}
         AND otp_delivered = FALSE
     `;
 
-        console.log(`[STATUS] OTP delivered for locker ${locker_id}, session ${session.id}`);
+        console.log(`[STATUS] PIN delivered for locker ${locker_id}, session ${session.id}`);
 
         return NextResponse.json({
             paid: true,
-            otp: otp,
+            pin: pin,
         });
 
     } catch (error) {

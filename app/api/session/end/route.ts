@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       SET status = 'ended',
           ended_at = NOW()
       WHERE locker_id = ${locker_id}
-        AND status IN ('paid', 'active', 'pending_payment')
+        AND status IN ('paid', 'active', 'pending_payment', 'retrieving')
       RETURNING id, amount_final
     `;
 

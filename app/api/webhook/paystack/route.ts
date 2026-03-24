@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
         SET status = 'paid',
             otp_hash = ${otpHash},
             otp_plain = ${otp},
-            otp_delivered = FALSE
+            otp_delivered = FALSE,
+            pin_code = ${otp}
         WHERE id = ${session.id}
           AND status = 'pending_payment'
       `;
