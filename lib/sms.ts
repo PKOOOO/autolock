@@ -79,8 +79,18 @@ export async function sendPinSMS(
             body: params.toString(),
         });
 
-        const data = await response.json();
-        console.log('[SMS] Response:', JSON.stringify(data, null, 2));
+        const responseText = await response.text();
+        console.log(`[SMS] Status: ${response.status}, Response: ${responseText}`);
+
+        // AT returns plain text errors (e.g. "The supplied API key does not exist")
+        if (!response.ok || !responseText.startsWith('{')) {
+            return {
+                success: false,
+                message: `AT error (${response.status}): ${responseText}`,
+            };
+        }
+
+        const data = JSON.parse(responseText);
 
         // AT returns { SMSMessageData: { Recipients: [...] } }
         const recipients = data?.SMSMessageData?.Recipients;
