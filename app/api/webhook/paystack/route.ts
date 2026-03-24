@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@/lib/db';
 import { verifyWebhookSignature, generateOTP, hashOTP } from '@/lib/paystack';
+import { sendPinSMS } from '@/lib/sms';
 
 export async function POST(request: NextRequest) {
     try {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest) {
             console.log(`[WEBHOOK] Payment success — ref: ${reference}`);
 
             const sessions = await sql`
-        SELECT id, status FROM sessions
+        SELECT id, status, phone FROM sessions
         WHERE paystack_ref = ${reference}
         LIMIT 1
       `;
@@ -64,6 +65,12 @@ export async function POST(request: NextRequest) {
         WHERE id = ${session.id}
           AND status = 'pending_payment'
       `;
+
+            // Send PIN via SMS (fire-and-forget — LCD still shows it)
+            if (session.phone) {
+                const smsResult = await sendPinSMS(session.phone, otp);
+                console.log(`[WEBHOOK] SMS: ${smsResult.message}`);
+            }
         }
 
         return NextResponse.json({ received: true });
