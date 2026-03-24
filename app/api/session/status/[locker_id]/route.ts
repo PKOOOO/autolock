@@ -48,9 +48,23 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       LIMIT 1
     `;
 
-        // No paid session with PIN ready
+        // No paid session with PIN ready — check for active stored session
         if (sessions.length === 0) {
-            return NextResponse.json({ paid: false });
+            // Check if there's an active session (items stored, PIN already shown)
+            // This is used by ESP32 on boot to recover state after reboot
+            const activeSessions = await sql`
+                SELECT id FROM sessions
+                WHERE locker_id = ${locker_id}
+                  AND status = 'active'
+                  AND pin_code IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 1
+            `;
+
+            return NextResponse.json({
+                paid: false,
+                has_active_session: activeSessions.length > 0,
+            });
         }
 
         const session = sessions[0];
